@@ -9,6 +9,16 @@ int Nr = 6;
 //convolution size 
 int N = 91; 
 
+float pack2(vec2 a)
+{
+    return uintBitsToFloat(packHalf2x16(a));
+}
+
+vec2 unpack2(float packed)
+{
+    return unpackHalf2x16(floatBitsToUint(packed));
+}
+
 vec3 pack2vec3(vec3 a, vec3 b) 
 {
     uvec3 packed = uvec3(packHalf2x16(vec2(a.x,b.x)), packHalf2x16(vec2(a.y,b.y)), packHalf2x16(vec2(a.z,b.z)));
@@ -101,3 +111,73 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 }
 
 
+//single component convolution pass x
+//first pass of separable convolution
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{    
+    //do a convolution in the x direction on iChannel0
+    ivec2 resol = ivec2(iResolution.xy);
+    ivec2 coord = ivec2(fragCoord.xy);
+
+    float sums[Nr];
+    for(int i = 0; i < Nr; i++)
+        sums[i] = 0.0;
+
+    for (int i = -Nc; i < Nc; i++) 
+    {
+        ivec2 pos = coord + ivec2(i, 0);
+
+        if(pos.x < 0 || pos.x >= resol.x || pos.y < 0 || pos.y >= resol.y)
+            continue;
+
+        float density = texelFetch(iChannel0, pos, 0).z;
+        
+        //loop over ranks
+        for(int j = 0; j < Nr; j++)
+        {
+            sums[j] += density * U[i + Nc + j * N];
+        }
+    }
+
+    //write the sum packed to the output
+    fragColor = vec4(0.0);
+
+    //loop over pairs of ranks
+    for(int j = 0; j < Nr; j += 2)
+    {
+        fragColor[j / 2] = pack2(sums[j], sums[j + 1]);
+    }
+}
+
+//second pass: do the convolution in the y direction
+//and write the result to the output
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    //do a convolution in the y direction on iChannel0
+    ivec2 resol = ivec2(iResolution.xy);
+    ivec2 coord = ivec2(fragCoord.xy);
+
+    float sum = 0.0;
+    for (int i = -Nc; i < Nc; i++) 
+    {
+        //use texelFetch to get the pixel at the current index
+        ivec2 pos = coord + ivec2(0, i);
+
+        //skip if the coordinate is outside the image
+        if(pos.x < 0 || pos.x >= resol.x || pos.y < 0 || pos.y >= resol.y)
+            continue;
+        
+        vec4 data = texelFetch(iChannel0, pos, 0);
+
+        //loop over pairs of ranks
+        for(int j = 0; j < Nr; j += 2)
+        {
+            vec2 val = unpack2(data[j / 2]);
+            sum += val.x * V[i + Nc + j * N];
+            sum += val.y * V[i + Nc + (j + 1) * N];
+        }
+    }
+
+    //return the sum
+    fragColor = vec4(sum);
+}
