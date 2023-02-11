@@ -59,12 +59,12 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
        
         float density = getDensityError(pos);
 
-        int id = (i > Nc) ? (2 * Nc - i) : (i + Nc);
+        int id = (i + Nc);
         //loop over ranks
         for(int j = 0; j < 4; j++)
         {
-            sum0[j] += density * U[id + 2 * j * Nc];
-            sum1[j] += density * U[id + (2 * j + 1) * Nc];
+            sum0[j] += density * U[id + 2 * j * N];
+            sum1[j] += density * U[id + (2 * j + 1) * N];
         }
     }
 
@@ -88,18 +88,19 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     {
         //use texelFetch to get the pixel at the current index
         ivec2 pos = coord + ivec2(0, i);
-        pos.x = pos.x % resol.x;
-        pos.y = pos.y % resol.y;
+        
+        //wrap around
+        pos.x = (pos.x + resol.x) % resol.x;
+        pos.y = (pos.y + resol.y) % resol.y;
         
         vec4 data = texelFetch(iChannel0, pos, 0);
 
-        int id = (i > Nc) ? (2 * Nc - i) : (i + Nc);
         //loop over pairs of ranks
         for(int j = 0; j < 4; j++)
         {
-            vec2 val = unpack2(data[j / 2]);
-            sum += val.x * V[id + 2 * j * Nc];
-            sum += val.y * V[id + (2 * j + 1) * Nc];
+            vec2 val = unpack2(data[j]);
+            sum += val.x * V[i + Nc + 2 * j * N];
+            sum += val.y * V[i + Nc + (2*j + 1) * N];
         }
     }
 
